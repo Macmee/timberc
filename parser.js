@@ -11,9 +11,10 @@ timber({
     
  init: function(saveTo, homeDir) {
 
-        this.private.homeDir = homeDir;
-     
-        process.chdir(homeDir);
+        this.private.homeDir = homeDir ? homeDir : '';
+
+        if(this.private.homeDir)
+            process.chdir(homeDir);
 
         this.transverseProject('');
 
@@ -29,7 +30,10 @@ timber({
             if(err) {
                 console.log(err);
             } else {
-                var output = clc.green('Compiled to "' + saveLocation + "\"");
+                var output = clc.green('Successfully compiled to "' + saveLocation + "\"");
+                console.log(output);
+                var not = clc.bold.underline('NOT');
+                var output = clc.cyan('Do ' + not + ' move this file outside of the directory it was generated in.');
                 console.log(output);
             }
         });        
@@ -51,7 +55,7 @@ timber({
             alreadyParsed[filePath] = true;
 
             // process the given file
-            var code = this.processFile(filePath);
+            var code = this.processFile(filePath, undefined, dep.requestedBy);
 
             // create a context for this dependency and add to output
             output.push(this.builtRunInContext(code, filePath));
@@ -99,22 +103,32 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
             var path = dir + files[i];
             if(fs.lstatSync(path).isDirectory()) {
                 this.transverseProject(path + '/');
-            }else if(timber.endsWith(path, '.js')) {
+            }else if(timber.endsWith(path, '.js') || timber.endsWith(path, '.htm') || timber.endsWith(path, '.html')) {
                 this.processFile(path, dir);
             }
         }
     },
 
-    processFile: function(fileName, base) {
+    processFile: function(fileName, base, requestedBy) {
 
         // web resources 
         if(fileName.substr(0, 4) === 'http')
             return httpsync.get(fileName).end().data.toString();        
         
         // only allow processFile to run once per file
-        var fileID = fs.lstatSync(fileName).ino;
-        if(this.private.fileCache[fileID])
-            return this.private.fileCache[fileID];
+        var fileID;
+        try{
+            fileID = fs.lstatSync(fileName).ino;
+            if(this.private.fileCache[fileID])
+                return this.private.fileCache[fileID];            
+        }catch(e) {
+            var errorText = '[WARNING] Could not locate "' + fileName + '"';
+            if(requestedBy)
+                errorText += ' requested from "' + requestedBy + '"';
+            errorText += ', skipping file..';
+            var output = clc.yellow(errorText);
+            return console.log(output);
+        }
 
         // find this file's base directory
         if(!base)
@@ -135,7 +149,7 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
         }
 
         // this is not a JS file, just return it and do NOT parse it
-        else if(!timber.endsWith(fileName, '.js'))
+        else if( !timber.endsWith(fileName, '.js') && !timber.endsWith(fileName, '.htm') && !timber.endsWith(fileName, '.html') ) 
             return data;
 
         // deal with tokens
@@ -160,7 +174,8 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
                         extendingPath = extendingPath + '.js';
                     this.private.dependencies.push({
                         file: extendingPath,
-                        base: base
+                        base: base,
+                        requestedBy: fileName
                     });
                 }
 
@@ -178,14 +193,18 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
                         prependToFile.push('var ' + selector.variableName + '=getModule("' + moduleLocation + '");');
                     }
                     // if this is hbs, make sure handlebars is included
-                    this.private.dependencies.push({
-                        file: ':handlebars-runtime.js',
-                        base: base
-                    });
+                    if( timber.endsWith(moduleLocation, '.handlebars') || timber.endsWith(moduleLocation, '.hbs') ) {
+                        this.private.dependencies.push({
+                            file: ':handlebars-runtime.js',
+                            base: base,
+                            requestedBy: fileName
+                        });
+                    }
                     // add this requirement to req list
                     this.private.dependencies.push({
                         file: moduleLocation,
-                        base: base
+                        base: base,
+                        requestedBy: fileName
                     });
                 }
                 data = prependToFile.join('') + data;
