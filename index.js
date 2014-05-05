@@ -5,6 +5,21 @@ var filesProcessing = [];
 var parseMode = 'files';
 var output = 'compiled.js';
 var home = false;
-process.argv.splice(0, 2);
 
-new parser(output, process.argv[0]);
+// build settings
+process.argv.splice(0, 2);
+var options = {};
+var currentSetting = 'homeDir';
+for(var i in process.argv) {
+    var arg = process.argv[i];
+    if(arg[0] === '-') {
+        currentSetting = arg.substr(1);
+        continue;
+    }
+    if(typeof options[currentSetting] === 'undefined')
+        options[currentSetting] = [ arg ];
+    else
+        options[currentSetting].push(arg);
+}
+
+new parser(options);

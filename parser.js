@@ -5,36 +5,52 @@ timber({
     private: {
         paths: {},
         dependencies: [],
-        identifiers: /requires:|\.addPath\(|extends:/gm,
+        identifiers: /requires:|\.addPath\(|extends:|getModule\(/gm,
         fileCache: {}
     },
     
- init: function(saveTo, homeDir) {
+ init: function(options) {
 
-        this.private.homeDir = homeDir ? homeDir : '';
+        // determine where to save file
+        var saveTo = options.out ? options.out[0] : 'compiled.js';
+     
+        // make sure we have a home dir
+        if(!options.homeDir) {
+            var msg = clc.yellow('[WARNING] The first argument to timberc was not a directory to your source, using cwd.');
+            console.log(msg);
+            this.private.homeDir = '';
+        }else{
+            this.private.homeDir = options.homeDir[0];
+            process.chdir(this.private.homeDir);
+        }
 
-        if(this.private.homeDir)
-            process.chdir(homeDir);
+        // determine where to look for source
+        var sourceFolders = options.only ? options.only : [''];
 
-        this.transverseProject('');
+        // scan project for source code
+        for(var i in sourceFolders)
+            this.transverseProject(sourceFolders[i]);
 
+        // generate array of output
         var output = this.buildDependencies();
 
+        // save
         this.saveDependencies(saveTo, output);
 
     },
 
     saveDependencies: function(saveTo, output) {
+        
         var saveLocation = timber.pkgEnv.resolvePath(saveTo, this.private.homeDir);
-        fs.writeFile(saveTo, output.join(''), function(err) {
+        fs.writeFile(saveTo, '/*COMPILED*/' + output.join(''), function(err) {
             if(err) {
                 console.log(err);
             } else {
-                var output = clc.green('Successfully compiled to "' + saveLocation + "\"");
-                console.log(output);
+                var msg = clc.green('Successfully compiled ' + output.length + ' dependencies to "' + saveLocation + "\"");
+                console.log(msg);
                 var not = clc.bold.underline('NOT');
-                var output = clc.cyan('Do ' + not + ' move this file outside of the directory it was generated in.');
-                console.log(output);
+                var msg = clc.cyan('Do ' + not + ' move this file outside of the directory it was generated in.');
+                console.log(msg);
             }
         });        
     },
@@ -45,7 +61,7 @@ timber({
         var dep;
         var output = [];
         while( dep = this.private.dependencies.shift() ) {
-            
+
             // find path to file
             var filePath = timber.pkgEnv.resolvePath(dep.file, dep.base, this.private.paths);
 
@@ -96,16 +112,25 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
     },
 
     // transverse all files, generate paths and dependencies
-    transverseProject: function(dir) {
+    transverseProject: function(file) {
 
-        var files = fs.readdirSync(dir ? dir : '.');
-        for(var i in files) {
-            var path = dir + files[i];
-            if(fs.lstatSync(path).isDirectory()) {
-                this.transverseProject(path + '/');
-            }else if(timber.endsWith(path, '.js') || timber.endsWith(path, '.htm') || timber.endsWith(path, '.html')) {
-                this.processFile(path, dir);
+        var isDir = !file || fs.lstatSync(file).isDirectory();
+
+        // if this is a directory, transverse it and process each file
+        if(isDir) {
+            var files = fs.readdirSync(file ? file : '.');
+            for(var i in files) {
+                var path = file + files[i];
+                if(fs.lstatSync(path).isDirectory()) {
+                    this.transverseProject(path + '/');
+                }else if(timber.endsWith(path, '.js') || timber.endsWith(path, '.htm') || timber.endsWith(path, '.html')) {
+                    this.processFile(path, file);
+                }
             }
+
+        // just process this if its a file
+        }else{
+            this.processFile(file, timber.pkgEnv.basePath(file));
         }
     },
 
@@ -139,7 +164,7 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
         try{
             data = fs.readFileSync(fileName, 'utf8');
         }catch(e){}
-        if(!data)
+        if(!data || data.substr(0, 12) === '/*COMPILED*/')
             return;
 
         // process handlebars
@@ -179,6 +204,23 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
                     });
                 }
 
+            }else if(data[pos] === 'g') {
+                // parse this string
+                var object = new objectParser(data, pos+9);
+                // abort if no strings to parse
+                if(!object.strings.length)
+                    return;
+                // filename we extracted
+                var moduleLocation = object.strings[0].text;
+                // if this is hbs, make sure handlebars is included
+                this.includeDependencies(moduleLocation, base, fileName);
+                // add this dependencies
+                this.private.dependencies.push({
+                    file: moduleLocation,
+                    base: base,
+                    requestedBy: fileName
+                });
+                
             // requirements
             }else if(data[pos] === 'r') {
                 var prependToFile = [];
@@ -192,14 +234,10 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
                         data = timber.replaceRange(data, file.startPos, file.endPos - file.startPos + 1, "0");
                         prependToFile.push('var ' + selector.variableName + '=getModule("' + moduleLocation + '");');
                     }
+
                     // if this is hbs, make sure handlebars is included
-                    if( timber.endsWith(moduleLocation, '.handlebars') || timber.endsWith(moduleLocation, '.hbs') ) {
-                        this.private.dependencies.push({
-                            file: ':handlebars-runtime.js',
-                            base: base,
-                            requestedBy: fileName
-                        });
-                    }
+                    this.includeDependencies(moduleLocation, base, fileName);
+                    
                     // add this requirement to req list
                     this.private.dependencies.push({
                         file: moduleLocation,
@@ -214,6 +252,16 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
 
         return this.private.fileCache[fileID] = data;
             
+    },
+
+    includeDependencies: function(moduleLocation, base, requestedBy) {
+        if( timber.endsWith(moduleLocation, '.handlebars') || timber.endsWith(moduleLocation, '.hbs') ) {
+            this.private.dependencies.push({
+                file: ':handlebars-runtime.js',
+                base: base,
+                requestedBy: requestedBy
+            });
+        }        
     }
     
 });
