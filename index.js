@@ -5,8 +5,8 @@ var parser = getModule('parser.js');
 var fs = require('fs');
 data = fs.readFileSync('../timber/test/js/boot.js', 'utf8');
 var test = getModule('tokenFinder.js');
-return new test(data)
-
+new test(data)
+return console.log('done')
 
 
 var filesProcessing = [];
