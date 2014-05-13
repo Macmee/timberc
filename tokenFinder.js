@@ -3,10 +3,21 @@ timber({
     private: {
         pos: 0
     },
+
+    defaults: {
+        extends: [],
+        requires: [],
+        paths: []
+    },
     
     init: function(data) {
         this.private.data = data;
         this.parseStart();
+    },
+
+    mixin: function(haystack, needle) {
+        for(var i in needle)
+            haystack.push(needle[i]);
     },
     
     /* tokenizing */
@@ -101,6 +112,10 @@ timber({
                 // string
             }else if(c == '"' || c == "'") {
                 this.parseString();
+            }else if(c == '.' && this.nextTokenEquals('.addPath(')) {
+                this.parseAddPath();
+            }else if(c == 'g' && this.nextTokenEquals('getModule(')) {
+                this.parseGetModule();
             // something strange happened
             }else if(c == -1) {
                 return console.log('unclosed { tag!');
@@ -142,6 +157,7 @@ timber({
     },
 
     parseString: function() {
+        this.skipWhitespace();
         var terminator = this.private.data[this.private.pos++];
         var c;
         var str = [];
@@ -184,25 +200,28 @@ timber({
     parseRequires: function() {
         this.consumeToken('requires:');
         var strings = this.parseStringList();
-        console.log('requires', strings);
+        this.mixin(this.requires, strings);
     },
 
     parseAddPath: function() {
         this.consumeToken('.addPath(');
-        var name = this.parseString(); console.log(name);
-        this.consumeToken();       
-        var path = this.parseString(); console.log(path);
+        var name = this.parseString();
         this.consumeToken();
+        var path = this.parseString();
+        this.consumeToken();
+        this.paths.push({ name: name, path: path });
     },
 
     parseExtends: function() {
         this.consumeToken('extends:');
         var strings = this.parseStringList();
-        console.log('extends', strings);
+        this.mixin(this.extends, strings);
     },
 
-    parseGetModule: function() { console.log('getModule')
-        this.consumeToken();
+    parseGetModule: function() {
+        this.consumeToken('getModule(');
+        var strings = this.parseStringList();
+        this.mixin(this.requires, strings);
     }
     
 });

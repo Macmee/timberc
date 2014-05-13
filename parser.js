@@ -1,16 +1,18 @@
 timber({
 
-    requires: ['fs', 'objectParser', 'node_modules/httpsync', ':handlebars', 'node_modules/cli-color clc'],
+    requires: ['fs', 'objectParser', 'node_modules/httpsync', 'handlebars', 'node_modules/cli-color clc', 'tokenFinder'],
 
     private: {
         paths: {},
         dependencies: [],
-        identifiers: /requires:|\.addPath\(|extends:|getModule\(/gm,
         fileCache: {}
     },
     
  init: function(options) {
 
+        // immediately set location to handlebars-runtime for if it is required
+        this.handlebarsRuntimePath = __dirname + '/handlebars-runtime.js';
+     
         // determine where to save file
         var saveTo = options.out ? options.out[0] : 'compiled.js';
      
@@ -74,7 +76,7 @@ timber({
             var code = this.processFile(filePath, undefined, dep.requestedBy);
 
             // create a context for this dependency and add to output
-            output.push(this.builtRunInContext(code, filePath));
+            output.push(this.builtRunInContext(code, filePath, dep.saveAs));
 
         }
 
@@ -82,12 +84,15 @@ timber({
         
     },
 
-    builtRunInContext: function(code, fileName) {
+    builtRunInContext: function(code, fileName, saveAs) {
 
         var base = timber.pkgEnv.basePath(fileName);
 
+        if(!saveAs)
+            saveAs = fileName;
+
         return '\
-timber.pkgEnv.precompiled["' + fileName + '"] = (function(pkgEnv){\
+timber.pkgEnv.precompiled["' + saveAs + '"] = (function(pkgEnv){\
 function getModule(filename) {\
     return pkgEnv.getModule_real(filename, "' + base + '")\
 };\
@@ -177,6 +182,41 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
         else if( !timber.endsWith(fileName, '.js') && !timber.endsWith(fileName, '.htm') && !timber.endsWith(fileName, '.html') ) 
             return data;
 
+        var dep = new tokenFinder(data);
+
+        // build dependencies
+        for(var i in dep.paths) {
+            var obj = dep.paths[i];
+            var path = timber.pkgEnv.resolvePath(obj.path, base, this.private.paths);
+            if(!timber.endsWith(path, '/'))
+                path = path + '/';
+            this.private.paths[obj.name] = path;
+        }
+
+        // build extends
+        for(var i in dep.extends) {
+            var extendingPath = dep.extends[i];
+            if(!timber.endsWith(extendingPath, '.js'))
+                extendingPath = extendingPath + '.js';
+            this.private.dependencies.push({
+                file: extendingPath,
+                base: base,
+                requestedBy: fileName
+            });
+        }
+
+        // build requires
+        for(var i in dep.requires) {
+            var path = dep.requires[i];
+            if(!timber.endsWith(extendingPath, '.js'))
+                extendingPath = extendingPath + '.js';
+            this.private.dependencies.push({
+                file: extendingPath,
+                base: base,
+                requestedBy: fileName
+            });
+        }
+        
         // deal with tokens
         while ((match = this.private.identifiers.exec(data)) != null) {
 
@@ -257,8 +297,9 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
     includeDependencies: function(moduleLocation, base, requestedBy) {
         if( timber.endsWith(moduleLocation, '.handlebars') || timber.endsWith(moduleLocation, '.hbs') ) {
             this.private.dependencies.push({
-                file: ':handlebars-runtime.js',
+                file: this.handlebarsRuntimePath,
                 base: base,
+                saveAs: ':handlebars-runtime',
                 requestedBy: requestedBy
             });
         }        

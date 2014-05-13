@@ -243,7 +243,7 @@ Function.prototype.bind = function(obj) {
         }
         var module = { exports: { __undefined: true } };
         var oldContext = pkgEnv.createContext(base);
-        var exports = true;
+        var exports = {};
 
         // run the encapsulated code
         try{
@@ -310,7 +310,7 @@ pkgEnv.webRequire = function(fullPath, base) {
 pkgEnv.getModule_real = function(filename, base) {
 
     // find the file
-    var fullPath = this.resolvePath(filename, base);
+    var fullPath = this.resolvePath(filename, base); console.log(fullPath)
     var basename = this.baseName(filename);
 
     // use cache to get file
@@ -527,7 +527,7 @@ var classExtender = function(newClass, parent) {
 	var self = this;
 
         // give this timber deep copies of its defaults
-        if(typeof this.deepProperties !== 'undefined') {
+    if(typeof this.deepProperties !== 'undefined') {
 	    for(var prop in this.deepProperties)
 		this[prop] = JSON.parse(this.deepProperties[prop]);
 	    delete this.deepProperties;
@@ -544,10 +544,15 @@ var classExtender = function(newClass, parent) {
 
 	this.trigger = function(name, value, callback) {
 		var callbacks = propChangeCallbacks[name];
-		if(callbacks)
-			for(var i in callbacks)
-				callbacks[i].call(this, value, callback);
-	}
+		if(callbacks) {
+            var args = [];
+            for(var i = 1; i < arguments.length; i++) {
+                args.push(arguments[i]);
+            }
+		    for(var i in callbacks)
+				callbacks[i].apply(this, args);
+        }
+	};
 
 	this.on = function(key, callback) {
 		// if event is for property, cause assignment to trigger change
@@ -571,7 +576,7 @@ var classExtender = function(newClass, parent) {
 			propChangeCallbacks[key] = [ callback ];
 		else
 			propChangeCallbacks[key].push(callback);
-	}
+	};
 
 	// create objects if none were given
 	if(!params)

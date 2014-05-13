@@ -1,14 +1,6 @@
 require('./timber_compiled.js');
 var parser = getModule('parser.js');
 
-
-var fs = require('fs');
-data = fs.readFileSync('../timber/test/js/boot.js', 'utf8');
-var test = getModule('tokenFinder.js');
-new test(data)
-return console.log('done')
-
-
 var filesProcessing = [];
 var parseMode = 'files';
 var output = 'compiled.js';
