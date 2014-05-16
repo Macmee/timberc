@@ -216,6 +216,8 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
                 requestedBy: fileName
             });
         }
+
+        return;
         
         // deal with tokens
         while ((match = this.private.identifiers.exec(data)) != null) {
