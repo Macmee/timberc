@@ -8,18 +8,17 @@ var home = false;
 
 // build settings
 process.argv.splice(0, 2);
-var options = {};
+var options = { homeDir: [] };
 var currentSetting = 'homeDir';
 for(var i in process.argv) {
     var arg = process.argv[i];
     if(arg[0] === '-') {
         currentSetting = arg.substr(1);
+        if(!options[currentSetting])
+            options[currentSetting] = [];
         continue;
     }
-    if(typeof options[currentSetting] === 'undefined')
-        options[currentSetting] = [ arg ];
-    else
-        options[currentSetting].push(arg);
+    options[currentSetting].push(arg);
 }
 
 new parser(options);

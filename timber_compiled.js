@@ -310,7 +310,7 @@ pkgEnv.webRequire = function(fullPath, base) {
 pkgEnv.getModule_real = function(filename, base) {
 
     // find the file
-    var fullPath = this.resolvePath(filename, base); console.log(fullPath)
+    var fullPath = this.resolvePath(filename, base);
     var basename = this.baseName(filename);
 
     // use cache to get file
@@ -412,7 +412,7 @@ trick.addPath = function(key, filename) {
 
 globalScope.getModule = function(filename) {
 	return pkgEnv.getModule_real(filename, pkgEnv.getBasePath());
-}
+};
 
 
 	/* classExtender takes a child function and a parent function, 

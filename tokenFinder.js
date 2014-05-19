@@ -87,7 +87,7 @@ timber({
             this.parseString();
             this.parseStart();
             // timber
-        }else if( (c == 't' && this.nextTokenEquals('timber(')) || (c == 't' && this.nextTokenEquals('.extends(')) ) {
+        }else if( (c == 't' && this.nextTokenEquals('timber(')) || (c == '.' && this.nextTokenEquals('.extend(')) ) {
             this.parseTimber();
             this.parseStart();
         }else if(c == '.' && this.nextTokenEquals('.addPath(')) {
@@ -127,7 +127,7 @@ timber({
     },
 
     parseTimber: function() {
-        var startLength = this.nextToken(7) == 'timber(' ? 7 : 9; // determine if this is .extends or timber(
+        var startLength = this.nextToken(7) == 'timber(' ? 7 : 8; // determine if this is .extends or timber(
         // remove {
         this.consumeToken(startLength);
         // loop until we hit the end
@@ -158,6 +158,7 @@ timber({
 
     parseString: function() {
         this.skipWhitespace();
+        var startPos = this.private.pos;
         var terminator = this.private.data[this.private.pos++];
         var c;
         var str = [];
@@ -168,7 +169,11 @@ timber({
                 str.push(c);
             }
         }
-        return str.join('');
+        return {
+            text: str.join(''),
+            startPos: startPos,
+            length: this.private.pos - startPos
+        };
     },
 
     parseStringList: function() {

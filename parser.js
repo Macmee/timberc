@@ -7,8 +7,16 @@ timber({
         dependencies: [],
         fileCache: {}
     },
+
+    defaults: {
+      debugPrintFiles: false  
+    },
     
  init: function(options) {
+
+        // this flag prints files that get compiled
+        if(options.pf)
+            this.debugPrintFiles = true;
 
         // immediately set location to handlebars-runtime for if it is required
         this.handlebarsRuntimePath = __dirname + '/handlebars-runtime.js';
@@ -66,11 +74,14 @@ timber({
 
             // find path to file
             var filePath = timber.pkgEnv.resolvePath(dep.file, dep.base, this.private.paths);
-
+            
             // only compute each file once
             if(alreadyParsed[filePath])
                 continue;
             alreadyParsed[filePath] = true;
+
+            if(this.debugPrintFiles)
+                console.log(filePath);
 
             // process the given file
             var code = this.processFile(filePath, undefined, dep.requestedBy);
@@ -179,45 +190,57 @@ if(typeof exports !== "undefined" && !exports.__undefined) {\
         }
 
         // this is not a JS file, just return it and do NOT parse it
-        else if( !timber.endsWith(fileName, '.js') && !timber.endsWith(fileName, '.htm') && !timber.endsWith(fileName, '.html') ) 
-            return data;
+        else if( timber.endsWith(fileName, '.js') || timber.endsWith(fileName, '.htm') || timber.endsWith(fileName, '.html') ) {
 
-        var dep = new tokenFinder(data);
+            var dep = new tokenFinder(data);
 
-        // build dependencies
-        for(var i in dep.paths) {
-            var obj = dep.paths[i];
-            var path = timber.pkgEnv.resolvePath(obj.path, base, this.private.paths);
-            if(!timber.endsWith(path, '/'))
-                path = path + '/';
-            this.private.paths[obj.name] = path;
+            // build dependencies
+            for(var i in dep.paths) {
+                var obj = dep.paths[i]; 
+                var path = timber.pkgEnv.resolvePath(obj.path.text, base, this.private.paths);
+                if(!timber.endsWith(path, '/'))
+                    path = path + '/';
+                this.private.paths[obj.name.text] = path;
+            }
+
+            // build extends
+            for(var i in dep.extends) { 
+                var extendingPath = dep.extends[i].text;
+                if(!timber.endsWith(extendingPath, '.js'))
+                    extendingPath = extendingPath + '.js';
+                this.private.dependencies.push({
+                    file: extendingPath,
+                    base: base,
+                    requestedBy: fileName
+                });
+            }
+
+            // build requires
+            var prependToFile = [];
+            for(var i in dep.requires) {
+                var requiredPath = dep.requires[i];
+                var selector = timber.pkgEnv.moduleSelector(requiredPath.text);
+                var moduleLocation = selector.name + '.' + selector.extension;
+                // move local requirements outside of classes
+                if(selector.saveParent === 'local') {
+                    data = timber.replaceRange(data, requiredPath.startPos, requiredPath.length, "0");
+                    prependToFile.push('var ' + selector.variableName + '=getModule("' + moduleLocation + '");');
+                }
+                // if this is hbs, make sure handlebars is included
+                if(selector.extension === 'hbs' || selector.extension === 'handlebars') {
+                    this.includeDependencies(moduleLocation, base, fileName);
+                }
+                // add this requirement to req list
+                this.private.dependencies.push({
+                    file: moduleLocation,
+                    base: base,
+                    requestedBy: fileName
+                });
+            }
+            data = prependToFile.join('') + data;
         }
 
-        // build extends
-        for(var i in dep.extends) {
-            var extendingPath = dep.extends[i];
-            if(!timber.endsWith(extendingPath, '.js'))
-                extendingPath = extendingPath + '.js';
-            this.private.dependencies.push({
-                file: extendingPath,
-                base: base,
-                requestedBy: fileName
-            });
-        }
-
-        // build requires
-        for(var i in dep.requires) {
-            var path = dep.requires[i];
-            if(!timber.endsWith(extendingPath, '.js'))
-                extendingPath = extendingPath + '.js';
-            this.private.dependencies.push({
-                file: extendingPath,
-                base: base,
-                requestedBy: fileName
-            });
-        }
-
-        return;
+        return this.private.fileCache[fileID] = data;
         
         // deal with tokens
         while ((match = this.private.identifiers.exec(data)) != null) {
